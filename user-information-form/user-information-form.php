@@ -26,6 +26,7 @@ class UserInformationForm
       //Add shortcode
       add_shortcode('user-information-form', array($this, 'load_shortcode'));
 
+
       //Load Javascript and what 'wp_footer' does is adds code to the footer of website
       add_action('wp_footer', array($this, 'load_javascript'));
 
@@ -34,6 +35,13 @@ class UserInformationForm
 
       //Adding MetaBox 
       add_action('add_meta_boxes', array($this, 'create_metabox'));
+
+      //Adding filter
+      add_filter('manage_user_information_posts_columns', array($this, 'custom_information_columns'));
+
+      //Getting meta data for posts
+      add_action('manage_user_information_posts_custom_column', array($this, 'fill_information_columns'), 10, 2);
+
    }
 
    public function create_custom_post_type()
@@ -78,14 +86,14 @@ class UserInformationForm
    {
 
       ?>
-      
-      
+
+
       <h1>Registration Form</h1>
       <p> Fill the form and register yourself</p>
       <div class="registration-form">
 
-         <form  id = "user_registration_form" method="POST">
-         
+         <form id="user_registration_form" method="POST">
+
             <label for="name">Name:</label>
             <input type="text" name="name" id="name" required>
 
@@ -117,30 +125,33 @@ class UserInformationForm
 
          <div id="form-success" style="background:green; color:#fff; margin-top:20px;"></div>
          <div id="form-error" style="background:red; color:#fff;"></div>
-         
+
       </div>
 
       <?php
 
    }
 
-   public function load_javascript(){
+   
+
+   public function load_javascript()
+   {
 
       ?>
 
-         <script>
+      <script>
 
-            //It wil grab a nonce which is loaded in every session and make sure csrf forgey not happens, makes sure form is being filled from the website
-            var nonce = '<?php echo wp_create_nonce('wp_rest');?>';
-           
-           // created this function so that I can use $ sign instead of jQuery
-           (function($){
+         //It wil grab a nonce which is loaded in every session and make sure csrf forgey not happens, makes sure form is being filled from the website
+         var nonce = '<?php echo wp_create_nonce('wp_rest'); ?>';
 
-            $('#user_registration_form').submit(function(event) {
+         // created this function so that I can use $ sign instead of jQuery
+         (function ($) {
+
+            $('#user_registration_form').submit(function (event) {
 
                // This functionn will prevent the browser from redirecting to next page when we click submit
                event.preventDefault();
-               
+
                // All the form data will be serialized
                var form = $(this).serialize();
                console.log(form);
@@ -149,91 +160,157 @@ class UserInformationForm
                $.ajax({
 
                   method: 'post',
-                  url: '<?php echo get_rest_url(null, 'user-information-form/send-data');?>',
-                  headers: {'X-WP-Nonce': nonce},
+                  url: '<?php echo get_rest_url(null, 'user-information-form/send-data'); ?>',
+                  headers: { 'X-WP-Nonce': nonce },
                   data: form,
-                  success: function(){
-                     
+                  success: function () {
+
                      $("#form-success").html("Your form was sent").fadeIn();
                   },
-                  error: function(){
+                  error: function () {
                      $("#form-error").html("There was error submitting your form").fadeIn();
                   }
 
                })
 
-            }) 
+            })
 
-           })(jQuery)
-            
+         })(jQuery)
 
-         </script>
+
+      </script>
 
       <?php
 
    }
 
- 
-   public function register_rest_api(){
 
-        // This function will allows us to register routes, so it knows to receive data from that specific routes
-        register_rest_route( 'user-information-form', 'send-data', array(
-                  'methods' => 'POST',
-                  'callback' => array($this, 'handle_information_form')
-        ));
+   public function register_rest_api()
+   {
+
+      // This function will allows us to register routes, so it knows to receive data from that specific routes
+      register_rest_route('user-information-form', 'send-data', array(
+         'methods' => 'POST',
+         'callback' => array($this, 'handle_information_form')
+      )
+      );
 
    }
 
-   public function handle_information_form($data){
+   public function handle_information_form($data)
+   {
       //this is where we will handle the data that gets posted
-     
+
       $headers = $data->get_headers();
       $params = $data->get_params();
 
       $nonce = $headers['x_wp_nonce'][0];
-      if(!wp_verify_nonce( $nonce, 'wp_rest')){
+      if (!wp_verify_nonce($nonce, 'wp_rest')) {
          return new WP_REST_Response('Message not send', 422);
       }
 
       //
-     
+
       $post_arr = [
          'post_title' => $params['name'],
          'post_type' => 'user_information',
          'post_status' => 'publish'
       ];
-         
-     $post_id = wp_insert_post($post_arr);
 
-     foreach($params as $label => $value){
-         
-      add_post_meta( $post_id, $label, $value);
+      $post_id = wp_insert_post($post_arr);
 
-     }
-      
-      if($post_id){
-         return new WP_REST_Response('Thank you for registering', 200); 
+      foreach ($params as $label => $value) {
+
+         add_post_meta($post_id, $label, $value);
+
+      }
+
+      if ($post_id) {
+         return new WP_REST_Response('Thank you for registering', 200);
       }
 
    }
 
-   public function create_metabox(){
+   public function create_metabox()
+   {
 
       add_meta_box('custom_information_form', 'Submisson', array($this, 'display_submission'), 'user_information');
 
    }
 
-   public function display_submission(){
-      
+   public function display_submission()
+   {
+
       $postmetas = get_post_meta(get_the_ID());
+
 
       echo "<ul>";
 
-      foreach($postmetas as $key => $value ){
-         echo '<li>'. $key . ":" .$value[0]. '</li>';
-      }
+      echo '<li><strong>Name: </strong>' . esc_html(get_post_meta(get_the_ID(), 'name', true)) . '</li>';
+      echo '<li><strong>Phone: </strong>' . esc_html(get_post_meta(get_the_ID(), 'phone', true)) . '</li>';
+      echo '<li><strong>Email: </strong>' . esc_html(get_post_meta(get_the_ID(), 'email', true)) . '</li>';
+      echo '<li><strong>Address: </strong>' . esc_html(get_post_meta(get_the_ID(), 'address', true)) . '</li>';
+      echo '<li><strong>Education: </strong>' . esc_html(get_post_meta(get_the_ID(), 'education', true)) . '</li>';
+      echo '<li><strong>Experience: </strong>' . esc_html(get_post_meta(get_the_ID(), 'experience', true)) . '</li>';
+      echo '<li><strong>About: </strong>' . esc_html(get_post_meta(get_the_ID(), 'about-me', true)) . '</li>';
 
       echo "</ul>";
+
+   }
+
+   public function custom_information_columns($columns)
+   {
+
+      $columns = array(
+
+         'cb' => $columns['cb'],
+         'name' => 'Name',
+         'phone' => 'Phone',
+         'email' => 'Email',
+         'address' => 'Address',
+         'education' => 'Education',
+         'experience' => 'Experience',
+         'about' => 'About'
+      );
+
+      return $columns;
+   }
+
+   public function fill_information_columns($columns, $post_id)
+   {
+
+      switch ($columns) {
+         case 'name':
+            echo esc_html(get_post_meta($post_id, 'name', true));
+            break;
+
+         case 'phone':
+            echo esc_html(get_post_meta($post_id, 'phone', true));
+            break;
+
+         case 'email':
+            echo esc_html(get_post_meta($post_id, 'email', true));
+            break;
+
+         case 'address':
+            echo esc_html(get_post_meta($post_id, 'address', true));
+            break;
+
+         case 'education':
+            echo esc_html(get_post_meta($post_id, 'education', true));
+            break;
+
+         case 'experience':
+            echo esc_html(get_post_meta($post_id, 'experience', true));
+
+            break;
+
+         case 'about':
+            echo esc_html(get_post_meta($post_id, 'about-me', true));
+
+            break;
+
+      }
 
    }
 
